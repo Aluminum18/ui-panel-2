@@ -14,10 +14,12 @@ namespace UIPanel
         [SerializeField]
         private bool _showInitUIFromStart = true;
         [SerializeField]
-        private List<UIPanel> _UIPanels;
+        private List<BaseUIPanel> _UIPanels;
+
+        private Dictionary<UIPanel, AddressableUIPanel> _addressableUIs = new();
 
         // Store UI panel following opening order
-        private Stack<IUIPanel> _panelStack = new();
+        private Stack<UIPanel> _panelStack = new();
         public int ShowingPanelCount => _panelStack.Count;
 
         public static event Action OnGlobalClickerBlockerActive;
@@ -54,62 +56,6 @@ namespace UIPanel
             ClosePanelIfOpened(topPanel);
         }
 
-        public void ClosePanelIfOpened(IUIPanel panel)
-        {
-            if (panel.Status != PanelStatus.Opened)
-            {
-                return;
-            }
-
-            panel.Close();
-        }
-
-        public bool IsOnTop(IUIPanel panel)
-        {
-            if (_panelStack.Count == 0)
-            {
-                return false;
-            }
-
-            var topPanel = _panelStack.Peek();
-
-            return panel.GetPanelInstanceID() == topPanel.GetPanelInstanceID();
-        }
-
-        public void PushToStack(IUIPanel panel)
-        {
-            if (0 < _panelStack.Count)
-            {
-                var recentPanel = _panelStack.Peek();
-                recentPanel.SetClickBlockerVisible(false);
-            }
-
-            _panelStack.Push(panel);
-        }
-
-        public void PopFromStack()
-        {
-            if (_panelStack.Count == 0)
-            {
-                return;
-            }
-
-            _panelStack.Pop();
-
-            if (_panelStack.Count == 0)
-            {
-                return;
-            }
-
-            var previous = _panelStack.Peek();
-            if (previous.Status == PanelStatus.Opened || previous.Status == PanelStatus.IsOpening)
-            {
-                previous.SetClickBlockerVisible(true);
-                return;
-            }
-            PopFromStack();
-        }
-
         public void CloseAllButInitPanels()
         {
             while (_panelStack.Count > 0)
@@ -124,14 +70,105 @@ namespace UIPanel
             }
         }
 
-        public void NotifyGlobalClickerBlockerActive()
+        public bool IsOnTop(BaseUIPanel panel)
+        {
+            if (_panelStack.Count == 0)
+            {
+                return false;
+            }
+
+            var topPanel = _panelStack.Peek();
+
+            return panel.GetPanelInstanceID() == topPanel.GetPanelInstanceID();
+        }
+
+        internal void ClosePanelIfOpened(BaseUIPanel panel)
+        {
+            if (panel.Status != PanelStatus.Opened)
+            {
+                return;
+            }
+
+            panel.Close();
+        }
+
+        internal void PushToStack(UIPanel panel)
+        {
+            if (0 < _panelStack.Count)
+            {
+                var recentPanel = _panelStack.Peek();
+                recentPanel.SetClickBlockerVisible(false);
+            }
+
+            _panelStack.Push(panel);
+        }
+
+        internal void PopFromStack()
+        {
+            if (_panelStack.Count == 0)
+            {
+                return;
+            }
+
+            var popPanel = _panelStack.Pop();
+            HandleClosingAddressablePanel(popPanel);
+
+            if (_panelStack.Count == 0)
+            {
+                return;
+            }
+
+            var previous = _panelStack.Peek();
+            if (previous == null)
+            {
+                goto PopNext;
+            }
+            if (previous.Status == PanelStatus.Opened || previous.Status == PanelStatus.IsOpening)
+            {
+                previous.SetClickBlockerVisible(true);
+                return;
+            }
+
+            PopNext:
+            PopFromStack();
+        }
+
+        internal void NotifyGlobalClickerBlockerActive()
         {
             OnGlobalClickerBlockerActive?.Invoke();
         }
 
-        public void NotifyAllGlobalClickBlockerInactive()
+        internal void NotifyAllGlobalClickBlockerInactive()
         {
             OnAllGlobalClickerBlockersInactive?.Invoke();
+        }
+
+        internal void RegisterAddressableUIPanel(UIPanel uiPanel, AddressableUIPanel aaPanel)
+        {
+            if (_addressableUIs.ContainsKey(uiPanel))
+            {
+                return;
+            }
+
+            _addressableUIs.Add(uiPanel, aaPanel);
+            uiPanel.Init(this);
+        }
+
+        private void HandleClosingAddressablePanel(UIPanel uiPanel)
+        {
+            if (uiPanel == null)
+            {
+                return;
+            }
+
+            _addressableUIs.TryGetValue(uiPanel, out var aaPanel);
+            if (aaPanel == null)
+            {
+                return;
+            }
+
+            _addressableUIs.Remove(uiPanel);
+            aaPanel.PostCloseProcess().Forget();
         }
 
         private void Start()
@@ -146,6 +183,9 @@ namespace UIPanel
 
         private async UniTaskVoid InitAllUIPanels()
         {
+            // the init frame handles very heavy logic, showing animation from beginning often causes lagging
+            await UniTask.DelayFrame(2);
+
             for (int i = 0; i < _UIPanels.Count; i++)
             {
                 var panel = _UIPanels[i];
@@ -159,8 +199,6 @@ namespace UIPanel
 
                 if (panel.ShowFromStart)
                 {
-                    // the init frame handles very heavy logic, showing animation from beginning often causes lagging
-                    await UniTask.DelayFrame(2);
                     panel.Open();
                 }
             }

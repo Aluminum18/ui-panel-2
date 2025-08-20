@@ -6,6 +6,7 @@ using UnityEngine;
 namespace UIPanel
 {
     [CustomEditor(typeof(UIPanel))]
+    [CanEditMultipleObjects]
     public class UIPanelEditor : Editor
     {
         public override void OnInspectorGUI()

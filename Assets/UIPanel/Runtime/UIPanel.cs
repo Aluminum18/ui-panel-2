@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Events;
 using UnityEngine.UI;
 
 namespace UIPanel
@@ -10,37 +9,14 @@ namespace UIPanel
     [RequireComponent(typeof(Canvas))]
     [RequireComponent(typeof(CanvasGroup))]
     [RequireComponent(typeof(GraphicRaycaster))]
-    public class UIPanel : MonoBehaviour, IUIPanel
+    public class UIPanel : BaseUIPanel
     {
-        [Header("Config")]
+        [Header("UIPanel Config")]
         [SerializeField]
         private List<UIElement> _elements;
         [SerializeField]
         private Image _clickBlocker;
-        public bool HasClickBlocker => _clickBlocker != null;
-        [SerializeField]
-        private bool _showFromStart;
-        [SerializeField]
-        private bool _refreshWhenReopen = false;
-        [SerializeField]
-        private bool _ignoreTimeScale = true;
 
-        [Header("UnityEvents")]
-        [SerializeField]
-        private UnityEvent _onRefresh;
-        [SerializeField]
-        private UnityEvent _onStartShow;
-        [SerializeField]
-        private UnityEvent _onAllElementsShown;
-        [SerializeField]
-        private UnityEvent _onStartHide;
-        [SerializeField]
-        private UnityEvent _onAllElementsHided;
-
-        [SerializeField]
-        private PanelStatus _panelStatus;
-
-        private UIController _uiController;
         private Canvas _canvas;
         private CanvasGroup _canvasGroup;
         private GraphicRaycaster _rayCaster;
@@ -50,8 +26,7 @@ namespace UIPanel
         private UniTask[] _showTasks;
         private UniTask[] _hideTasks;
 
-        #region IUIPanel interface implementations
-        public void Init(UIController controller)
+        public override void Init(UIController controller)
         {
             _canvas = GetComponent<Canvas>();
             _canvasGroup = GetComponent<CanvasGroup>();
@@ -84,24 +59,17 @@ namespace UIPanel
             TrackGlobalClickBlocker();
         }
 
-        public void Open()
+        public override void Open()
         {
             Async_Open().Forget();
         }
 
-        public void Close()
+        public override void Close()
         {
             Async_Close().Forget();
         }
 
-        public int GetPanelInstanceID()
-        {
-            return gameObject.GetInstanceID();
-        }
-        public bool ShowFromStart => _showFromStart;
-        public PanelStatus Status => _panelStatus;
-
-        public async UniTask Async_Open()
+        public override async UniTask Async_Open()
         {
             if (Status == PanelStatus.Opened || Status == PanelStatus.IsOpening)
             {
@@ -142,35 +110,8 @@ namespace UIPanel
             _uiController.PushToStack(this);
             FinishOpenProcess();
         }
-        public void SetClickBlockerVisible(bool visible)
-        {
-            if (_clickBlocker == null)
-            {
-                return;
-            }
-            Color color = _clickBlocker.color;
-            color.a = visible ? _clickBlockerOriginalAlpha : 0f;
-            _clickBlocker.color = color;
 
-            if (!_uiController.IsGlobalUI)
-            {
-                return;
-            }
-            if (visible)
-            {
-                _uiController.NotifyGlobalClickerBlockerActive();
-                return;
-            }
-            if (_uiController.ShowingPanelCount != 0)
-            {
-                return;
-            }
-
-            _uiController.NotifyAllGlobalClickBlockerInactive();
-        }
-        #endregion
-
-        public async UniTask Async_Close()
+        public override async UniTask Async_Close()
         {
             if (Status == PanelStatus.Closed || Status == PanelStatus.IsClosing)
             {
@@ -208,6 +149,33 @@ namespace UIPanel
             FinishCloseProcess();
         }
 
+        public override void SetClickBlockerVisible(bool visible)
+        {
+            if (_clickBlocker == null)
+            {
+                return;
+            }
+            Color color = _clickBlocker.color;
+            color.a = visible ? _clickBlockerOriginalAlpha : 0f;
+            _clickBlocker.color = color;
+
+            if (!_uiController.IsGlobalUI)
+            {
+                return;
+            }
+            if (visible)
+            {
+                _uiController.NotifyGlobalClickerBlockerActive();
+                return;
+            }
+            if (_uiController.ShowingPanelCount != 0)
+            {
+                return;
+            }
+
+            _uiController.NotifyAllGlobalClickBlockerInactive();
+        }
+
         public void CloseAndOpenOther(UIPanel other)
         {
             Async_CloseAndOpenOther(other).Forget();
@@ -218,23 +186,19 @@ namespace UIPanel
             other.Open();
         }
 
-        public void CloseAllButInitPanels()
-        {
-            _uiController.CloseAllButInitPanels();
-        }
-
         private void FinishOpenProcess()
         {
             _canvasGroup.interactable = true;
-            _onAllElementsShown?.Invoke();
+            _onAllElementsShown.Invoke();
             _panelStatus = PanelStatus.Opened;
         }
 
         private void FinishCloseProcess()
         {
+            transform.SetAsFirstSibling();
             _canvas.enabled = false;
             _rayCaster.enabled = false;
-            _onAllElementsHided?.Invoke();
+            _onAllElementsHided.Invoke();
             _panelStatus = PanelStatus.Closed;
         }
 
@@ -243,10 +207,6 @@ namespace UIPanel
             _canvasGroup.interactable = interactable;
         }
 
-        public void SetMoveToFront()
-        {
-            transform.SetAsLastSibling();
-        }
 
         private void ForcePanelToOpenedState()
         {
@@ -321,14 +281,5 @@ namespace UIPanel
 
             SetClickBlockerVisible(true);
         }      
-    }
-
-    [System.Serializable]
-    public enum PanelStatus
-    {
-        IsClosing = 0,
-        Closed = 1,
-        IsOpening = 2,
-        Opened = 3,
     }
 }

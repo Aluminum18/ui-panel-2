@@ -1,14 +1,14 @@
 
+using Cysharp.Threading.Tasks;
+
 namespace UIPanel
 {
     public interface IUIPanel
     {
         void Init(UIController controller);
         void Open();
+        UniTask Async_Open();
         void Close();
-        void SetClickBlockerVisible(bool visible);
-        int GetPanelInstanceID();
-        bool ShowFromStart { get; }
-        PanelStatus Status { get; }
+        UniTask Async_Close();
     }
 }
